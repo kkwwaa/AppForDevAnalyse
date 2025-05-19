@@ -1,4 +1,16 @@
 import pandas as pd
+import os
+import glob
+import logging
+
+def setup_logging(log_file):
+    """Настраиваем логирование ошибок в файл."""
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.ERROR,
+        format='%(asctime)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
 # Список недостатков (только 6 элементов, без 'NB! Все числа - положительные!')
 DEFICIENCIES = [
@@ -178,7 +190,7 @@ def calculate_deficiency_totals(df):
     # Умножаем суммы на веса недостатков
     weighted_totals = deficiency_sums * importance
 
-    DEF = DEFICIENCIES
+    DEF = DEFICIENCIES.copy()
     DEF.append('Много теории, но мало практики.')
 
     # Создаем DataFrame с недостатками, суммами, взвешенными суммами и рангами
@@ -207,33 +219,95 @@ def save_results(disciplines_df, deficiencies_df, output_file):
         print(f"Ошибка при сохранении файла {output_file}: {e}")
 
 
+def process_multiple_files(input_dir, output_file, log_file):
+    """Обрабатываем все .xlsx и .xls файлы и агрегируем результаты."""
+    setup_logging(log_file)
+
+    # Находим все .xlsx и .xls файлы
+    file_paths = glob.glob(os.path.join(input_dir, "*.xlsx")) + glob.glob(os.path.join(input_dir, "*.xls"))
+
+    if not file_paths:
+        error_msg = f"В директории {input_dir} не найдено .xlsx или .xls файлов"
+        print(error_msg)
+        logging.error(error_msg)
+        return
+
+    # Списки для хранения результатов
+    disciplines_list = []
+    deficiencies_list = []
+
+    for file_path in file_paths:
+        print(f"\nОбработка файла: {file_path}")
+        try:
+            # Читаем файл
+            df = read_excel_file(file_path)
+            if df is None:
+                logging.error(f"Не удалось прочитать файл {file_path}")
+                continue
+
+            # Проверяем структуру
+            if not check_table_structure(df):
+                logging.error(f"Файл {file_path} не прошёл проверку структуры")
+                continue
+
+            # Вычисляем СУММПРОИЗВ для дисциплин
+            result_disciplines = calculate_sumproduct(df)
+            if result_disciplines is None:
+                logging.error(f"Ошибка при вычислении СУММПРОИЗВ для {file_path}")
+                continue
+
+            # Вычисляем взвешенные суммы для недостатков
+            result_deficiencies = calculate_deficiency_totals(df)
+            if result_deficiencies is None:
+                logging.error(f"Ошибка при вычислении недостатков для {file_path}")
+                continue
+
+            # Добавляем результаты в списки
+            disciplines_list.append(result_disciplines)
+            deficiencies_list.append(result_deficiencies)
+
+        except Exception as e:
+            error_msg = f"Необработанная ошибка в файле {file_path}: {str(e)}"
+            print(error_msg)
+            logging.error(error_msg)
+
+    if not disciplines_list or not deficiencies_list:
+        error_msg = "Не удалось обработать ни один файл"
+        print(error_msg)
+        logging.error(error_msg)
+        return
+
+    # Агрегируем результаты для дисциплин
+    all_disciplines = pd.concat(disciplines_list, ignore_index=True)
+    all_disciplines = all_disciplines.groupby('Дисциплина').agg({
+        'СУММПРОИЗВ': 'mean'
+    }).reset_index()
+    all_disciplines.columns = ['Дисциплина', 'Среднее СУММПРОИЗВ']
+    all_disciplines['Ранг'] = all_disciplines['Среднее СУММПРОИЗВ'].rank(ascending=False, method='min').astype(int)
+
+    # Агрегируем результаты для недостатков
+    all_deficiencies = pd.concat(deficiencies_list, ignore_index=True)
+    all_deficiencies = all_deficiencies.groupby('Недостаток').agg({
+        'Веса': 'mean',
+        'Сумма оценок': 'mean',
+        'Взвешенная сумма': 'mean'
+    }).reset_index()
+    all_deficiencies.columns = ['Недостаток', 'Среднее Веса', 'Средняя Сумма оценок', 'Средняя Взвешенная сумма']
+    all_deficiencies['Ранг'] = all_deficiencies['Средняя Взвешенная сумма'].rank(ascending=False, method='min').astype(
+        int)
+
+    # Сохраняем агрегированные результаты
+    save_results(all_disciplines, all_deficiencies, output_file)
+    print(f"\nОбработка завершена. Лог ошибок сохранён в {log_file}")
+
 def main():
-    # Путь к файлу
-    input_file = "1.xlsx"
-    output_file = "output_results.xlsx"
+    # Пути
+    input_dir = "D:/PythonProject/AppForDevAnalyse"
+    output_file = "D:/PythonProject/AppForDevAnalyse/output_results.xlsx"
+    log_file = "D:/PythonProject/AppForDevAnalyse/errors.log"
 
-    # Читаем файл
-    df = read_excel_file(input_file)
-    if df is None:
-        return
-
-    # Проверяем структуру
-    if not check_table_structure(df):
-        return
-
-    # Вычисляем СУММПРОИЗВ для дисциплин
-    result_disciplines = calculate_sumproduct(df)
-    if result_disciplines is None:
-        return
-
-    # Вычисляем взвешенные суммы для недостатков
-    result_deficiencies = calculate_deficiency_totals(df)
-    if result_deficiencies is None:
-        return
-
-    # Сохраняем результаты в один файл
-    save_results(result_disciplines, result_deficiencies, output_file)
-
+    # Обрабатываем все файлы
+    process_multiple_files(input_dir, output_file, log_file)
 
 if __name__ == "__main__":
     main()

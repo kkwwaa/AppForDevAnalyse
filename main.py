@@ -28,9 +28,14 @@ DISCIPLINES = [
 ]
 
 def read_excel_file(file_path):
-    """Читаем Excel-файл."""
+    """Читаем Excel-файл (.xlsx или .xls)."""
     try:
-        df = pd.read_excel(file_path, engine='openpyxl')
+        if file_path.endswith('.xlsx'):
+            df = pd.read_excel(file_path, engine='openpyxl')
+        elif file_path.endswith('.xls'):
+            df = pd.read_excel(file_path, engine='xlrd')
+        else:
+            raise ValueError("Неподдерживаемый формат файла. Используйте .xlsx или .xls")
         print(f"Файл {file_path} успешно прочитан!")
         return df
     except Exception as e:

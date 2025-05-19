@@ -155,7 +155,7 @@ def calculate_sumproduct(df):
 def calculate_deficiency_totals(df):
     """Вычисляем взвешенные суммы и ранги для каждого недостатка."""
     # Извлекаем важность (вторая строка, столбцы Unnamed: 3–Unnamed: 8)
-    deficiency_columns = ['Недостатки','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+    deficiency_columns = ['Недостаток', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     importance = pd.to_numeric(df.iloc[1][deficiency_columns], errors='coerce').values
     # Извлекаем оценки (строки 3–15, те же столбцы)
     scores = df.iloc[3:][deficiency_columns].apply(pd.to_numeric, errors='coerce')
@@ -173,9 +173,13 @@ def calculate_deficiency_totals(df):
     # Умножаем суммы на веса недостатков
     weighted_totals = deficiency_sums * importance
 
+    DEF = DEFICIENCIES
+    DEF.append('Много теории, но мало практики.')
+
     # Создаем DataFrame с недостатками, суммами, взвешенными суммами и рангами
     result = pd.DataFrame({
-        'Недостаток': DEFICIENCIES,
+        'Недостаток': DEF,
+        'Веса': importance,
         'Сумма оценок': deficiency_sums,
         'Взвешенная сумма': weighted_totals
     })
@@ -183,12 +187,16 @@ def calculate_deficiency_totals(df):
     # Добавляем столбец с рангами (наибольшая взвешенная сумма = ранг 1)
     result['Ранг'] = result['Взвешенная сумма'].rank(ascending=False, method='min').astype(int)
 
-    return result+1
+    return result
 
-def save_results(df, output_file):
-    """Сохраняем результаты в новый Excel-файл."""
+def save_results(disciplines_df, deficiencies_df, output_file):
+    """Сохраняем результаты по дисциплинам и недостаткам в один Excel-файл на одном листе."""
     try:
-        df.to_excel(output_file, index=False, engine='openpyxl')
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            # Сохраняем таблицу дисциплин в начало листа
+            disciplines_df.to_excel(writer, sheet_name='Results', index=False, startrow=0)
+            # Сохраняем таблицу недостатков ниже с отступом в 2 строки
+            deficiencies_df.to_excel(writer, sheet_name='Results', index=False, startrow=len(disciplines_df) + 3)
         print(f"Результаты сохранены в {output_file}")
     except Exception as e:
         print(f"Ошибка при сохранении файла {output_file}: {e}")
@@ -196,8 +204,8 @@ def save_results(df, output_file):
 
 def main():
     # Путь к файлу
-    input_file = "D:/PythonProject/AppForDevAnalyse/1.xlsx"
-    output_file = "D:/PythonProject/AppForDevAnalyse/output_results.xlsx"
+    input_file = "1.xlsx"
+    output_file = "output_results.xlsx"
 
     # Читаем файл
     df = read_excel_file(input_file)
@@ -208,11 +216,18 @@ def main():
     if not check_table_structure(df):
         return
 
-    # Вычисляем СУММПРОИЗВ
-    result = calculate_sumproduct(df)
+    # Вычисляем СУММПРОИЗВ для дисциплин
+    result_disciplines = calculate_sumproduct(df)
+    if result_disciplines is None:
+        return
 
-    # Сохраняем результаты
-    save_results(result, output_file)
+    # Вычисляем взвешенные суммы для недостатков
+    result_deficiencies = calculate_deficiency_totals(df)
+    if result_deficiencies is None:
+        return
+
+    # Сохраняем результаты в один файл
+    save_results(result_disciplines, result_deficiencies, output_file)
 
 
 if __name__ == "__main__":

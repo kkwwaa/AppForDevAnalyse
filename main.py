@@ -2,6 +2,9 @@ import pandas as pd
 import os
 import glob
 import logging
+import matplotlib.pyplot as plt
+from io import BytesIO
+from openpyxl.drawing.image import Image
 
 def setup_logging(log_file):
     """Настраиваем логирование ошибок в файл."""
@@ -190,8 +193,7 @@ def calculate_deficiency_totals(df):
     # Умножаем суммы на веса недостатков
     weighted_totals = deficiency_sums * importance
 
-    DEF = DEFICIENCIES.copy()
-    DEF.append('Много теории, но мало практики.')
+    DEF = ['Много теории, но мало практики.'] + DEFICIENCIES
 
     # Создаем DataFrame с недостатками, суммами, взвешенными суммами и рангами
     result = pd.DataFrame({
@@ -206,24 +208,39 @@ def calculate_deficiency_totals(df):
 
     return result
 
-def save_results(disciplines_df, deficiencies_df, output_file):
-    """Сохраняем результаты по дисциплинам и недостаткам в один Excel-файл на одном листе."""
+
+def save_results(all_disciplines, all_deficiencies, output_file):
+    """Сохраняем агрегированные результаты и графики в Excel."""
     try:
+        # Создаём графики
+        disciplines_img, deficiencies_img = create_charts(all_disciplines, all_deficiencies)
+
         with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            # Сохраняем таблицу дисциплин в начало листа
-            disciplines_df.to_excel(writer, sheet_name='Results', index=False, startrow=0)
-            # Сохраняем таблицу недостатков ниже с отступом в 2 строки
-            deficiencies_df.to_excel(writer, sheet_name='Results', index=False, startrow=len(disciplines_df) + 3)
-        print(f"Результаты сохранены в {output_file}")
+            # Сохраняем таблицы
+            all_disciplines.to_excel(writer, sheet_name='Results', index=False, startrow=0)
+            all_deficiencies.to_excel(writer, sheet_name='Results', index=False, startrow=len(all_disciplines) + 3)
+
+            # Вставляем графики
+            workbook = writer.book
+            worksheet = writer.sheets['Results']
+
+            # График дисциплин
+            img1 = Image(disciplines_img)
+            worksheet.add_image(img1, f'A{len(all_disciplines) + len(all_deficiencies) + 6}')
+
+            # График недостатков
+            img2 = Image(deficiencies_img)
+            worksheet.add_image(img2, f'A{len(all_disciplines) + len(all_deficiencies) + 26}')
+
+        print(f"Агрегированные результаты и графики сохранены в {output_file}")
     except Exception as e:
         print(f"Ошибка при сохранении файла {output_file}: {e}")
-
 
 def process_multiple_files(input_dir, output_file, log_file):
     """Обрабатываем все .xlsx и .xls файлы и агрегируем результаты."""
     setup_logging(log_file)
 
-    # Находим все .xlsx и .xls файлы
+    # Находим файлы
     file_paths = glob.glob(os.path.join(input_dir, "*.xlsx")) + glob.glob(os.path.join(input_dir, "*.xls"))
 
     if not file_paths:
@@ -232,37 +249,31 @@ def process_multiple_files(input_dir, output_file, log_file):
         logging.error(error_msg)
         return
 
-    # Списки для хранения результатов
     disciplines_list = []
     deficiencies_list = []
 
     for file_path in file_paths:
         print(f"\nОбработка файла: {file_path}")
         try:
-            # Читаем файл
             df = read_excel_file(file_path)
             if df is None:
                 logging.error(f"Не удалось прочитать файл {file_path}")
                 continue
 
-            # Проверяем структуру
             if not check_table_structure(df):
                 logging.error(f"Файл {file_path} не прошёл проверку структуры")
                 continue
 
-            # Вычисляем СУММПРОИЗВ для дисциплин
             result_disciplines = calculate_sumproduct(df)
             if result_disciplines is None:
                 logging.error(f"Ошибка при вычислении СУММПРОИЗВ для {file_path}")
                 continue
 
-            # Вычисляем взвешенные суммы для недостатков
             result_deficiencies = calculate_deficiency_totals(df)
             if result_deficiencies is None:
                 logging.error(f"Ошибка при вычислении недостатков для {file_path}")
                 continue
 
-            # Добавляем результаты в списки
             disciplines_list.append(result_disciplines)
             deficiencies_list.append(result_deficiencies)
 
@@ -277,28 +288,71 @@ def process_multiple_files(input_dir, output_file, log_file):
         logging.error(error_msg)
         return
 
-    # Агрегируем результаты для дисциплин
+    # Агрегируем дисциплины
     all_disciplines = pd.concat(disciplines_list, ignore_index=True)
-    all_disciplines = all_disciplines.groupby('Дисциплина').agg({
-        'СУММПРОИЗВ': 'mean'
+    all_disciplines = all_disciplines.groupby('Дисциплина', sort=False).agg({
+        'СУММПРОИЗВ': ['mean', 'std']
     }).reset_index()
-    all_disciplines.columns = ['Дисциплина', 'Среднее СУММПРОИЗВ']
+    all_disciplines.columns = ['Дисциплина', 'Среднее СУММПРОИЗВ', 'Станд. отклонение СУММПРОИЗВ']
+    # Сортируем по порядку DISCIPLINES
+    all_disciplines['order'] = all_disciplines['Дисциплина'].map({d: i for i, d in enumerate(DISCIPLINES)})
+    all_disciplines = all_disciplines.sort_values('order').drop('order', axis=1).reset_index(drop=True)
     all_disciplines['Ранг'] = all_disciplines['Среднее СУММПРОИЗВ'].rank(ascending=False, method='min').astype(int)
 
-    # Агрегируем результаты для недостатков
+    # Агрегируем недостатки
     all_deficiencies = pd.concat(deficiencies_list, ignore_index=True)
-    all_deficiencies = all_deficiencies.groupby('Недостаток').agg({
+    all_deficiencies = all_deficiencies.groupby('Недостаток', sort=False).agg({
         'Веса': 'mean',
         'Сумма оценок': 'mean',
-        'Взвешенная сумма': 'mean'
+        'Взвешенная сумма': ['mean', 'std']
     }).reset_index()
-    all_deficiencies.columns = ['Недостаток', 'Среднее Веса', 'Средняя Сумма оценок', 'Средняя Взвешенная сумма']
-    all_deficiencies['Ранг'] = all_deficiencies['Средняя Взвешенная сумма'].rank(ascending=False, method='min').astype(
-        int)
+    all_deficiencies.columns = ['Недостаток', 'Среднее Веса', 'Средняя Сумма оценок', 'Средняя Взвешенная сумма', 'Станд. отклонение Взвешенной суммы']
+    # Сортируем по порядку DEFICIENCIES
+    DEF = ['Много теории, но мало практики.'] + DEFICIENCIES
+    all_deficiencies['order'] = all_deficiencies['Недостаток'].map({d: i for i, d in enumerate(DEF)})
+    all_deficiencies = all_deficiencies.sort_values('order').drop('order', axis=1).reset_index(drop=True)
+    all_deficiencies['Ранг'] = all_deficiencies['Средняя Взвешенная сумма'].rank(ascending=False, method='min').astype(int)
 
-    # Сохраняем агрегированные результаты
+    # Сохраняем результаты
     save_results(all_disciplines, all_deficiencies, output_file)
     print(f"\nОбработка завершена. Лог ошибок сохранён в {log_file}")
+
+
+def create_charts(all_disciplines, all_deficiencies):
+    """Создаём столбчатые диаграммы для дисциплин и недостатков."""
+    # График для дисциплин
+    plt.figure(figsize=(12, 8))  # Увеличиваем размер
+    bars = plt.bar(all_disciplines['Дисциплина'], all_disciplines['Средние баллы по недостаткам для дисциплин'], color='#1f77b4')
+    plt.title('Средние баллы по дисциплинам')
+    plt.xlabel('Дисциплина')
+    plt.ylabel('Средние баллы')
+    plt.xticks(rotation=45, ha='right', fontsize=8)  # Уменьшаем шрифт
+    plt.subplots_adjust(bottom=0.3)  # Увеличиваем нижнюю границу
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.1f}', va='bottom', fontsize=8)
+    disciplines_img = BytesIO()
+    plt.savefig(disciplines_img, format='png', bbox_inches='tight')
+    plt.close()
+    disciplines_img.seek(0)
+
+    # График для недостатков
+    plt.figure(figsize=(12, 8))  # Увеличиваем размер
+    bars = plt.bar(all_deficiencies['Недостаток'], all_deficiencies['Средние баллы по наличию недостатков'], color='#ff7f0e')
+    plt.title('Средняя Взвешенная сумма по недостаткам')
+    plt.xlabel('Недостаток')
+    plt.ylabel('Средняя Взвешенная сумма')
+    plt.xticks(rotation=45, ha='right', fontsize=8)  # Уменьшаем шрифт
+    plt.subplots_adjust(bottom=0.3)  # Увеличиваем нижнюю границу
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.1f}', va='bottom', fontsize=8)
+    deficiencies_img = BytesIO()
+    plt.savefig(deficiencies_img, format='png', bbox_inches='tight')
+    plt.close()
+    deficiencies_img.seek(0)
+
+    return disciplines_img, deficiencies_img
 
 def main():
     # Пути

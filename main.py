@@ -59,43 +59,35 @@ def read_excel_file(file_path):
 
 
 def check_table_structure(df):
-    """Проверяем, что таблица имеет правильную структуру."""
-    # Ожидаемое количество столбцов: 9
-    if len(df.columns) != 9:
-        print(f"Ошибка: ожидается 9 столбцов, найдено {len(df.columns)}: {list(df.columns)}")
+    """Проверяем, что таблица имеет правильную структуру для обработки (минимум 9 столбцов, 16 строк)."""
+    # Проверяем минимальное количество столбцов (9)
+    if len(df.columns) < 9:
+        print(f"Ошибка: ожидается минимум 9 столбцов, найдено {len(df.columns)}: {list(df.columns)}")
         return False
 
-    # Проверяем названия столбцов
+    # Проверяем минимальное количество строк (16)
+    if len(df) < 16:
+        print(f"Ошибка: ожидается минимум 16 строк, найдено {len(df)}")
+        return False
+
+    # Проверяем названия первых 9 столбцов
     expected_columns = ['Unnamed: 0', 'Unnamed: 1', 'Недостаток', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5',
                         'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
-    if list(df.columns) != expected_columns:
-        print(f"Ошибка: ожидались столбцы {expected_columns}, найдены {list(df.columns)}")
-        return False
-
-    # Проверяем количество строк: 16 (заголовки, важность, пустая, 13 дисциплин)
-    if len(df) != 16:
-        print(f"Ошибка: ожидается 16 строк, найдено {len(df)}")
+    if list(df.columns)[:9] != expected_columns:
+        print(f"Ошибка: ожидались столбцы {expected_columns}, найдены {list(df.columns)[:9]}")
         return False
 
     # Проверяем недостатки в первой строке (столбцы Unnamed: 3–Unnamed: 8)
     deficiency_columns = ['Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     deficiencies_row = df.iloc[0][deficiency_columns].tolist()
-    # Очищаем строки от лишних пробелов и невидимых символов
     deficiencies_row = [str(x).strip() if pd.notna(x) else x for x in deficiencies_row]
-    if deficiencies_row != DEFICIENCIES:
+    if deficiencies_row[:6] != DEFICIENCIES:
         print(f"Ошибка: недостатки в первой строке не совпадают.")
         print(f"Ожидались: {DEFICIENCIES}")
         print(f"Найдены: {deficiencies_row}")
-        for i, (expected, found) in enumerate(zip(DEFICIENCIES, deficiencies_row)):
-            if expected != found:
-                print(f"Различие в элементе {i}:")
-                print(f"  Ожидалось: {expected}")
-                print(f"  Найдено: {found}")
-                print(f"  Ожидалось (коды символов): {[ord(c) for c in expected]}")
-                print(f"  Найдено (коды символов): {[ord(c) for c in found if c != ' ']}")
         return False
 
-    # Проверяем, что Unnamed: 1 в первой строке содержит 'NB! Все числа - положительные!'
+    # Проверяем текст 'NB! Все числа - положительные!' в Unnamed: 1 (первая строка)
     nb_text = str(df.iloc[0]['Unnamed: 1']).strip()
     expected_nb = 'NB! Все числа - положительные!'
     if nb_text != expected_nb:
@@ -104,44 +96,41 @@ def check_table_structure(df):
 
     # Проверяем важность во второй строке (столбцы Unnamed: 3–Unnamed: 8)
     importance = df.iloc[1][deficiency_columns]
-    # Проверяем, что все значения можно преобразовать в числа
     try:
         importance = pd.to_numeric(importance, errors='coerce')
     except Exception as e:
         print(f"Ошибка: значения важности (вторая строка) не могут быть преобразованы в числа: {importance.tolist()}")
-        print(f"Подробности: {e}")
         return False
 
-    # Проверяем пропуски после преобразования
     if importance.isna().any():
         print(f"Ошибка: в значениях важности есть пропуски или некорректные данные: {importance.tolist()}")
         return False
 
-    # Проверяем диапазон 0–10
     if not importance.between(0, 10).all():
         print(f"Ошибка: значения важности (вторая строка) должны быть от 0 до 10, найдены: {importance.tolist()}")
         return False
 
-    # Проверяем номера дисциплин в первом столбце (index 3–15, должны быть 1.0–13.0)
-    discipline_numbers = df.iloc[3:, 0].tolist()
+    # Проверяем номера дисциплин в первом столбце (строки 3–15, индексы 1.0–13.0)
+    discipline_numbers = df.iloc[3:16, 0].tolist()
     expected_numbers = [float(i) for i in range(1, 14)]
     if discipline_numbers != expected_numbers:
-        print(
-            f"Ошибка: номера дисциплин в первом столбце не совпадают. Ожидались: {expected_numbers}, найдены: {discipline_numbers}")
+        print(f"Ошибка: номера дисциплин в первом столбце не совпадают. Ожидались: {expected_numbers}, найдены: {discipline_numbers}")
         return False
 
-    # Проверяем оценки (index 3–15, столбцы Unnamed: 3–Unnamed: 8)
-    scores = df.iloc[3:][deficiency_columns]
-    # Преобразуем оценки в числа
+    # Проверяем оценки (строки 3–15, столбцы Unnamed: 3–Unnamed: 8)
+    scores = df.iloc[3:16][deficiency_columns]
     try:
         scores = scores.apply(pd.to_numeric, errors='coerce')
     except Exception as e:
         print(f"Ошибка: оценки (строки 4–16) не могут быть преобразованы в числа: {e}")
         return False
 
+    if scores.isna().any().any():
+        print(f"Ошибка: в оценках есть пропуски: {scores.isna().sum().to_dict()}")
+        return False
+
     if not ((scores >= 0) & (scores <= 10)).all().all():
-        print(
-            f"Ошибка: оценки (строки 4–16, столбцы {deficiency_columns}) должны быть от 0 до 10, найдены некорректные значения")
+        print(f"Ошибка: оценки (строки 4–16, столбцы {deficiency_columns}) должны быть от 0 до 10")
         return False
 
     return True
@@ -322,7 +311,7 @@ def create_charts(all_disciplines, all_deficiencies):
     """Создаём столбчатые диаграммы для дисциплин и недостатков."""
     # График для дисциплин
     plt.figure(figsize=(12, 8))  # Увеличиваем размер
-    bars = plt.bar(all_disciplines['Дисциплина'], all_disciplines['Средние баллы по недостаткам для дисциплин'], color='#1f77b4')
+    bars = plt.bar(all_disciplines['Дисциплина'], all_disciplines['Среднее СУММПРОИЗВ'], color='#1f77b4')
     plt.title('Средние баллы по дисциплинам')
     plt.xlabel('Дисциплина')
     plt.ylabel('Средние баллы')
@@ -338,7 +327,7 @@ def create_charts(all_disciplines, all_deficiencies):
 
     # График для недостатков
     plt.figure(figsize=(12, 8))  # Увеличиваем размер
-    bars = plt.bar(all_deficiencies['Недостаток'], all_deficiencies['Средние баллы по наличию недостатков'], color='#ff7f0e')
+    bars = plt.bar(all_deficiencies['Недостаток'], all_deficiencies['Средняя Взвешенная сумма'], color='#ff7f0e')
     plt.title('Средняя Взвешенная сумма по недостаткам')
     plt.xlabel('Недостаток')
     plt.ylabel('Средняя Взвешенная сумма')

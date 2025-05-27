@@ -57,27 +57,22 @@ def read_excel_file(file_path):
         print(f"Ошибка при чтении файла {file_path}: {e}")
         return None
 
-
 def check_table_structure(df):
     """Проверяем, что таблица имеет правильную структуру для обработки (минимум 9 столбцов, 16 строк)."""
-    # Проверяем минимальное количество столбцов (9)
     if len(df.columns) < 9:
         print(f"Ошибка: ожидается минимум 9 столбцов, найдено {len(df.columns)}: {list(df.columns)}")
         return False
 
-    # Проверяем минимальное количество строк (16)
     if len(df) < 16:
         print(f"Ошибка: ожидается минимум 16 строк, найдено {len(df)}")
         return False
 
-    # Проверяем названия первых 9 столбцов
     expected_columns = ['Unnamed: 0', 'Unnamed: 1', 'Недостаток', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5',
                         'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     if list(df.columns)[:9] != expected_columns:
         print(f"Ошибка: ожидались столбцы {expected_columns}, найдены {list(df.columns)[:9]}")
         return False
 
-    # Проверяем недостатки в первой строке (столбцы Unnamed: 3–Unnamed: 8)
     deficiency_columns = ['Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     deficiencies_row = df.iloc[0][deficiency_columns].tolist()
     deficiencies_row = [str(x).strip() if pd.notna(x) else x for x in deficiencies_row]
@@ -87,14 +82,12 @@ def check_table_structure(df):
         print(f"Найдены: {deficiencies_row}")
         return False
 
-    # Проверяем текст 'NB! Все числа - положительные!' в Unnamed: 1 (первая строка)
     nb_text = str(df.iloc[0]['Unnamed: 1']).strip()
     expected_nb = 'NB! Все числа - положительные!'
     if nb_text != expected_nb:
         print(f"Ошибка: в Unnamed: 1 (первая строка) ожидалось '{expected_nb}', найдено: '{nb_text}'")
         return False
 
-    # Проверяем важность во второй строке (столбцы Unnamed: 3–Unnamed: 8)
     importance = df.iloc[1][deficiency_columns]
     try:
         importance = pd.to_numeric(importance, errors='coerce')
@@ -110,14 +103,12 @@ def check_table_structure(df):
         print(f"Ошибка: значения важности (вторая строка) должны быть от 0 до 10, найдены: {importance.tolist()}")
         return False
 
-    # Проверяем номера дисциплин в первом столбце (строки 3–15, индексы 1.0–13.0)
     discipline_numbers = df.iloc[3:16, 0].tolist()
     expected_numbers = [float(i) for i in range(1, 14)]
     if discipline_numbers != expected_numbers:
         print(f"Ошибка: номера дисциплин в первом столбце не совпадают. Ожидались: {expected_numbers}, найдены: {discipline_numbers}")
         return False
 
-    # Проверяем оценки (строки 3–15, столбцы Unnamed: 3–Unnamed: 8)
     scores = df.iloc[3:16][deficiency_columns]
     try:
         scores = scores.apply(pd.to_numeric, errors='coerce')
@@ -135,41 +126,31 @@ def check_table_structure(df):
 
     return True
 
-
 def calculate_sumproduct(df):
     """Вычисляем СУММПРОИЗВ для каждой дисциплины."""
-    # Извлекаем важность (вторая строка, столбцы Unnamed: 3–Unnamed: 8)
-    deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+    deficiency_columns = ['Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     importance = pd.to_numeric(df.iloc[1][deficiency_columns], errors='coerce').values
-    # Извлекаем оценки (строки 3–15, те же столбцы)
-    scores = df.iloc[3:][deficiency_columns].apply(pd.to_numeric, errors='coerce')
+    scores = df.iloc[3:16][deficiency_columns].apply(pd.to_numeric, errors='coerce')
 
-    # Вычисляем СУММПРОИЗВ для каждой дисциплины
     discipline_totals = []
     for i in range(len(scores)):
         total = sum(importance * scores.iloc[i])
         discipline_totals.append(total)
 
-    # Создаем новую таблицу для результатов
     result = pd.DataFrame({
         'Дисциплина': DISCIPLINES,
         'СУММПРОИЗВ': discipline_totals
     })
 
-    # Добавляем столбец с рангами (наибольший СУММПРОИЗВ = ранг 1)
     result['Ранг'] = result['СУММПРОИЗВ'].rank(ascending=False, method='min').astype(int)
-
     return result
 
 def calculate_deficiency_totals(df):
     """Вычисляем взвешенные суммы и ранги для каждого недостатка."""
-    # Извлекаем важность (вторая строка, столбцы Unnamed: 3–Unnamed: 8)
-    deficiency_columns = ['Недостаток', 'Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+    deficiency_columns = ['Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     importance = pd.to_numeric(df.iloc[1][deficiency_columns], errors='coerce').values
-    # Извлекаем оценки (строки 3–15, те же столбцы)
-    scores = df.iloc[3:][deficiency_columns].apply(pd.to_numeric, errors='coerce')
+    scores = df.iloc[3:16][deficiency_columns].apply(pd.to_numeric, errors='coerce')
 
-    # Проверяем, нет ли пропусков в importance или scores
     if pd.isna(importance).any():
         print(f"Ошибка: в значениях важности есть пропуски: {importance.tolist()}")
         return None
@@ -177,51 +158,46 @@ def calculate_deficiency_totals(df):
         print(f"Ошибка: в оценках есть пропуски: {scores.isna().sum().to_dict()}")
         return None
 
-    # Вычисляем сумму оценок по каждому недостатку (по столбцам)
     deficiency_sums = scores.sum(axis=0).values
-    # Умножаем суммы на веса недостатков
     weighted_totals = deficiency_sums * importance
 
     DEF = ['Много теории, но мало практики.'] + DEFICIENCIES
+    extended_importance = [0] + list(importance)
+    extended_sums = [0] + list(deficiency_sums)
+    extended_weighted = [0] + list(weighted_totals)
 
-    # Создаем DataFrame с недостатками, суммами, взвешенными суммами и рангами
     result = pd.DataFrame({
         'Недостаток': DEF,
-        'Веса': importance,
-        'Сумма оценок': deficiency_sums,
-        'Взвешенная сумма': weighted_totals
+        'Веса': extended_importance,
+        'Сумма оценок': extended_sums,
+        'Взвешенная сумма': extended_weighted
     })
 
-    # Добавляем столбец с рангами (наибольшая взвешенная сумма = ранг 1)
     result['Ранг'] = result['Взвешенная сумма'].rank(ascending=False, method='min').astype(int)
-
     return result
 
-
-def save_results(all_disciplines, all_deficiencies, output_file):
-    """Сохраняем агрегированные результаты и графики в Excel."""
+def save_results(all_disciplines, all_deficiencies, first_table, output_file):
+    """Сохраняем агрегированные результаты, таблицу со средними и графики в Excel."""
     try:
-        # Создаём графики
         disciplines_img, deficiencies_img = create_charts(all_disciplines, all_deficiencies)
 
         with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            # Сохраняем таблицы
-            all_disciplines.to_excel(writer, sheet_name='Results', index=False, startrow=0)
-            all_deficiencies.to_excel(writer, sheet_name='Results', index=False, startrow=len(all_disciplines) + 3)
+            # Сохраняем исходную таблицу со средними значениями
+            first_table.to_excel(writer, sheet_name='Results', index=False, startrow=0)
+            # Сохраняем таблицы дисциплин и недостатков
+            all_disciplines.to_excel(writer, sheet_name='Results', index=False, startrow=len(first_table) + 3)
+            all_deficiencies.to_excel(writer, sheet_name='Results', index=False, startrow=len(first_table) + len(all_disciplines) + 6)
 
-            # Вставляем графики
             workbook = writer.book
             worksheet = writer.sheets['Results']
 
-            # График дисциплин
             img1 = Image(disciplines_img)
-            worksheet.add_image(img1, f'A{len(all_disciplines) + len(all_deficiencies) + 6}')
+            worksheet.add_image(img1, f'A{len(first_table) + len(all_disciplines) + len(all_deficiencies) + 9}')
 
-            # График недостатков
             img2 = Image(deficiencies_img)
-            worksheet.add_image(img2, f'A{len(all_disciplines) + len(all_deficiencies) + 26}')
+            worksheet.add_image(img2, f'A{len(first_table) + len(all_disciplines) + len(all_deficiencies) + 29}')
 
-        print(f"Агрегированные результаты и графики сохранены в {output_file}")
+        print(f"Агрегированные результаты, таблица со средними и графики сохранены в {output_file}")
     except Exception as e:
         print(f"Ошибка при сохранении файла {output_file}: {e}")
 
@@ -229,7 +205,6 @@ def process_multiple_files(input_dir, output_file, log_file):
     """Обрабатываем все .xlsx и .xls файлы и агрегируем результаты."""
     setup_logging(log_file)
 
-    # Находим файлы
     file_paths = glob.glob(os.path.join(input_dir, "*.xlsx")) + glob.glob(os.path.join(input_dir, "*.xls"))
 
     if not file_paths:
@@ -238,10 +213,12 @@ def process_multiple_files(input_dir, output_file, log_file):
         logging.error(error_msg)
         return
 
-    disciplines_list = []
-    deficiencies_list = []
+    disciplines_list = [] #из функции calculate_sumproduct
+    deficiencies_list = [] #из calculate_deficiency_totals
+    numeric_data = []  # Для хранения числовых данных (весов и оценок)
+    first_table = None  # Для хранения таблицы из первого файла
 
-    for file_path in file_paths:
+    for i, file_path in enumerate(file_paths):
         print(f"\nОбработка файла: {file_path}")
         try:
             df = read_excel_file(file_path)
@@ -252,6 +229,19 @@ def process_multiple_files(input_dir, output_file, log_file):
             if not check_table_structure(df):
                 logging.error(f"Файл {file_path} не прошёл проверку структуры")
                 continue
+
+            # Ограничиваем таблицу первыми 9 столбцами и 16 строками
+            df = df.iloc[:16, :9].copy()
+
+            # Сохраняем таблицу из первого файла
+            if i == 0:
+                first_table = df.copy()
+
+            # Извлекаем числовые данные (весов и оценок)
+            deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+            importance = pd.to_numeric(df.iloc[1][deficiency_columns], errors='coerce')
+            scores = df.iloc[3:16][deficiency_columns].apply(pd.to_numeric, errors='coerce')
+            numeric_data.append(pd.concat([importance.to_frame().T, scores], axis=0))
 
             result_disciplines = calculate_sumproduct(df)
             if result_disciplines is None:
@@ -271,11 +261,19 @@ def process_multiple_files(input_dir, output_file, log_file):
             print(error_msg)
             logging.error(error_msg)
 
-    if not disciplines_list or not deficiencies_list:
+    if not disciplines_list or not deficiencies_list or first_table is None:
         error_msg = "Не удалось обработать ни один файл"
         print(error_msg)
         logging.error(error_msg)
         return
+
+    # Рассчитываем средние значения для числовых ячеек
+    if numeric_data:
+        mean_numeric = pd.concat(numeric_data).groupby(level=0).mean()
+        # Обновляем числовые значения в first_table
+        deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+        first_table.loc[1, deficiency_columns] = mean_numeric.iloc[0].values
+        first_table.loc[3:15, deficiency_columns] = mean_numeric.iloc[1:].values
 
     # Агрегируем дисциплины
     all_disciplines = pd.concat(disciplines_list, ignore_index=True)
@@ -283,12 +281,12 @@ def process_multiple_files(input_dir, output_file, log_file):
         'СУММПРОИЗВ': ['mean', 'std']
     }).reset_index()
     all_disciplines.columns = ['Дисциплина', 'Среднее СУММПРОИЗВ', 'Станд. отклонение СУММПРОИЗВ']
-    # Сортируем по порядку DISCIPLINES
     all_disciplines['order'] = all_disciplines['Дисциплина'].map({d: i for i, d in enumerate(DISCIPLINES)})
     all_disciplines = all_disciplines.sort_values('order').drop('order', axis=1).reset_index(drop=True)
     all_disciplines['Ранг'] = all_disciplines['Среднее СУММПРОИЗВ'].rank(ascending=False, method='min').astype(int)
 
     # Агрегируем недостатки
+    DEF = ['Много теории, но мало практики.'] + DEFICIENCIES
     all_deficiencies = pd.concat(deficiencies_list, ignore_index=True)
     all_deficiencies = all_deficiencies.groupby('Недостаток', sort=False).agg({
         'Веса': 'mean',
@@ -296,27 +294,23 @@ def process_multiple_files(input_dir, output_file, log_file):
         'Взвешенная сумма': ['mean', 'std']
     }).reset_index()
     all_deficiencies.columns = ['Недостаток', 'Среднее Веса', 'Средняя Сумма оценок', 'Средняя Взвешенная сумма', 'Станд. отклонение Взвешенной суммы']
-    # Сортируем по порядку DEFICIENCIES
-    DEF = ['Много теории, но мало практики.'] + DEFICIENCIES
     all_deficiencies['order'] = all_deficiencies['Недостаток'].map({d: i for i, d in enumerate(DEF)})
     all_deficiencies = all_deficiencies.sort_values('order').drop('order', axis=1).reset_index(drop=True)
     all_deficiencies['Ранг'] = all_deficiencies['Средняя Взвешенная сумма'].rank(ascending=False, method='min').astype(int)
 
     # Сохраняем результаты
-    save_results(all_disciplines, all_deficiencies, output_file)
+    save_results(all_disciplines, all_deficiencies, first_table, output_file)
     print(f"\nОбработка завершена. Лог ошибок сохранён в {log_file}")
-
 
 def create_charts(all_disciplines, all_deficiencies):
     """Создаём столбчатые диаграммы для дисциплин и недостатков."""
-    # График для дисциплин
-    plt.figure(figsize=(12, 8))  # Увеличиваем размер
+    plt.figure(figsize=(12, 8))
     bars = plt.bar(all_disciplines['Дисциплина'], all_disciplines['Среднее СУММПРОИЗВ'], color='#1f77b4')
     plt.title('Средние баллы по дисциплинам')
     plt.xlabel('Дисциплина')
     plt.ylabel('Средние баллы')
-    plt.xticks(rotation=45, ha='right', fontsize=8)  # Уменьшаем шрифт
-    plt.subplots_adjust(bottom=0.3)  # Увеличиваем нижнюю границу
+    plt.xticks(rotation=45, ha='right', fontsize=8)
+    plt.subplots_adjust(bottom=0.3)
     for bar in bars:
         yval = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.1f}', va='bottom', fontsize=8)
@@ -325,14 +319,13 @@ def create_charts(all_disciplines, all_deficiencies):
     plt.close()
     disciplines_img.seek(0)
 
-    # График для недостатков
-    plt.figure(figsize=(12, 8))  # Увеличиваем размер
+    plt.figure(figsize=(12, 8))
     bars = plt.bar(all_deficiencies['Недостаток'], all_deficiencies['Средняя Взвешенная сумма'], color='#ff7f0e')
     plt.title('Средняя Взвешенная сумма по недостаткам')
     plt.xlabel('Недостаток')
     plt.ylabel('Средняя Взвешенная сумма')
-    plt.xticks(rotation=45, ha='right', fontsize=8)  # Уменьшаем шрифт
-    plt.subplots_adjust(bottom=0.3)  # Увеличиваем нижнюю границу
+    plt.xticks(rotation=45, ha='right', fontsize=8)
+    plt.subplots_adjust(bottom=0.3)
     for bar in bars:
         yval = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2, yval, f'{yval:.1f}', va='bottom', fontsize=8)
@@ -344,12 +337,10 @@ def create_charts(all_disciplines, all_deficiencies):
     return disciplines_img, deficiencies_img
 
 def main():
-    # Пути
     input_dir = "D:/PythonProject/AppForDevAnalyse"
     output_file = "D:/PythonProject/AppForDevAnalyse/output_results.xlsx"
     log_file = "D:/PythonProject/AppForDevAnalyse/errors.log"
 
-    # Обрабатываем все файлы
     process_multiple_files(input_dir, output_file, log_file)
 
 if __name__ == "__main__":

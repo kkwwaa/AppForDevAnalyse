@@ -213,7 +213,7 @@ def process_multiple_files(input_dir, output_file, log_file):
         logging.error(error_msg)
         return
 
-    disciplines_list = [] #из функции calculate_sumproduct
+    disciplines_list = [] #из функции calculate_sumproduc
     deficiencies_list = [] #из calculate_deficiency_totals
     numeric_data = []  # Для хранения числовых данных (весов и оценок)
     first_table = None  # Для хранения таблицы из первого файла

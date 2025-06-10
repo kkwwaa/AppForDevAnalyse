@@ -128,7 +128,7 @@ def check_table_structure(df):
 
 def calculate_sumproduct(df):
     """Вычисляем СУММПРОИЗВ для каждой дисциплины."""
-    deficiency_columns = ['Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+    deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     importance = pd.to_numeric(df.iloc[1][deficiency_columns], errors='coerce').values
     scores = df.iloc[3:16][deficiency_columns].apply(pd.to_numeric, errors='coerce')
 
@@ -147,7 +147,7 @@ def calculate_sumproduct(df):
 
 def calculate_deficiency_totals(df):
     """Вычисляем взвешенные суммы и ранги для каждого недостатка."""
-    deficiency_columns = ['Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
+    deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
     importance = pd.to_numeric(df.iloc[1][deficiency_columns], errors='coerce').values
     scores = df.iloc[3:16][deficiency_columns].apply(pd.to_numeric, errors='coerce')
 
@@ -158,19 +158,16 @@ def calculate_deficiency_totals(df):
         print(f"Ошибка: в оценках есть пропуски: {scores.isna().sum().to_dict()}")
         return None
 
-    deficiency_sums = scores.sum(axis=0).values
-    weighted_totals = deficiency_sums * importance
+    deficiency_sums = scores.sum(axis=0).values #суммы по недостаткам (вертикальные)
+    weighted_totals = deficiency_sums * importance #верхние суммы умноженные на веса недостатков
 
     DEF = ['Много теории, но мало практики.'] + DEFICIENCIES
-    extended_importance = [0] + list(importance)
-    extended_sums = [0] + list(deficiency_sums)
-    extended_weighted = [0] + list(weighted_totals)
 
     result = pd.DataFrame({
         'Недостаток': DEF,
-        'Веса': extended_importance,
-        'Сумма оценок': extended_sums,
-        'Взвешенная сумма': extended_weighted
+        'Веса': importance,
+        'Сумма оценок': deficiency_sums,
+        'Взвешенная сумма': weighted_totals
     })
 
     result['Ранг'] = result['Взвешенная сумма'].rank(ascending=False, method='min').astype(int)
@@ -274,6 +271,21 @@ def process_multiple_files(input_dir, output_file, log_file):
         deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
         first_table.loc[1, deficiency_columns] = mean_numeric.iloc[0].values
         first_table.loc[3:15, deficiency_columns] = mean_numeric.iloc[1:].values
+        # Добавляем новые столбцы: Негативный рейтинг в абсолютных и относительных единицах
+        # Расчёт для строк 3–15 (дисциплины, индексы 2–14)
+        mainabs_rating = first_table.loc[1, deficiency_columns].sum()*10 #по недостаткам и 10 - макс абс негатив рейтинг
+        for idx in range(3, 16):  # Индексы 2–14 соответствуют строкам 3–15 (дисциплины)
+            # Негативный рейтинг в абсолютных единицах = сумма по токам * 8.43
+            abs_rating = (first_table.loc[idx, deficiency_columns]*first_table.loc[1, deficiency_columns]).sum()
+            # Негативный рейтинг в относительных единицах = (среднее / 10) * 100
+            rel_rating = (abs_rating / mainabs_rating) * 100
+            first_table.loc[idx, 'Негативный рейтинг в абсолютных единицах'] = round(abs_rating, 2)
+            first_table.loc[idx, 'Негативный рейтинг в относительных единицах'] = f"{round(rel_rating, 2)}%"
+
+        # Добавляем заголовки для новых столбцов в строку 2 (индекс 1)
+        first_table.loc[1, 'Негативный рейтинг в абсолютных единицах'] = 'Негативный рейтинг в абсолютных единицах'
+        first_table.loc[
+            1, 'Негативный рейтинг в относительных единицах'] = 'Негативный рейтинг в относительных единицах'
 
     # Агрегируем дисциплины
     all_disciplines = pd.concat(disciplines_list, ignore_index=True)
@@ -337,7 +349,7 @@ def create_charts(all_disciplines, all_deficiencies):
     return disciplines_img, deficiencies_img
 
 def main():
-    input_dir = "D:/PythonProject/AppForDevAnalyse"
+    input_dir = "D:/PythonProject/AppForDevAnalyse/source"
     output_file = "D:/PythonProject/AppForDevAnalyse/output_results.xlsx"
     log_file = "D:/PythonProject/AppForDevAnalyse/errors.log"
 

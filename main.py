@@ -214,6 +214,7 @@ def process_multiple_files(input_dir, output_file, log_file):
     deficiencies_list = [] #из calculate_deficiency_totals
     numeric_data = []  # Для хранения числовых данных (весов и оценок)
     first_table = None  # Для хранения таблицы из первого файла
+    mn=200
 
     for i, file_path in enumerate(file_paths):
         print(f"\nОбработка файла: {file_path}")
@@ -231,8 +232,9 @@ def process_multiple_files(input_dir, output_file, log_file):
             df = df.iloc[:16, :9].copy()
 
             # Сохраняем таблицу из первого файла
-            if first_table==None:
+            if i<mn:
                 first_table = df.copy()
+                mn=i
 
             # Извлекаем числовые данные (весов и оценок)
             deficiency_columns = ['Недостаток','Unnamed: 3', 'Unnamed: 4', 'Unnamed: 5', 'Unnamed: 6', 'Unnamed: 7', 'Unnamed: 8']
@@ -283,9 +285,10 @@ def process_multiple_files(input_dir, output_file, log_file):
             first_table.loc[idx, 'Негативный рейтинг в относительных единицах'] = f"{round(rel_rating, 2)}%"
 
         # Добавляем заголовки для новых столбцов в строку 2 (индекс 1)
-        first_table.loc[1, 'Негативный рейтинг в абсолютных единицах'] = 'Негативный рейтинг в абсолютных единицах'
+        first_table.loc[0, 'Негативный рейтинг в абсолютных единицах'] = 'Негативный рейтинг в абсолютных единицах'
+        first_table.loc[1, 'Негативный рейтинг в абсолютных единицах'] = mainabs_rating
         first_table.loc[
-            1, 'Негативный рейтинг в относительных единицах'] = 'Негативный рейтинг в относительных единицах'
+            0, 'Негативный рейтинг в относительных единицах'] = 'Негативный рейтинг в относительных единицах'
 
     # Агрегируем дисциплины
     all_disciplines = pd.concat(disciplines_list, ignore_index=True)

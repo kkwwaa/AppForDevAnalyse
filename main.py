@@ -231,7 +231,7 @@ def process_multiple_files(input_dir, output_file, log_file):
             df = df.iloc[:16, :9].copy()
 
             # Сохраняем таблицу из первого файла
-            if i == 0:
+            if first_table==None:
                 first_table = df.copy()
 
             # Извлекаем числовые данные (весов и оценок)
@@ -349,9 +349,9 @@ def create_charts(all_disciplines, all_deficiencies):
     return disciplines_img, deficiencies_img
 
 def main():
-    input_dir = "D:/PythonProject/AppForDevAnalyse/source"
-    output_file = "D:/PythonProject/AppForDevAnalyse/output_results.xlsx"
-    log_file = "D:/PythonProject/AppForDevAnalyse/errors.log"
+    input_dir = os.path.join(os.getcwd(), "source")
+    output_file = os.path.join(os.getcwd(), "output_results.xlsx")
+    log_file = os.path.join(os.getcwd(), "errors.log")
 
     process_multiple_files(input_dir, output_file, log_file)
 
